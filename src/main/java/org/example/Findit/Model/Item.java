@@ -3,7 +3,7 @@ import java.time.LocalDate;
 
 public abstract class Item {
     private int id;
-    private int userId;       // who reported this item
+    private int userId;
     private String category;
     private String itemName;
     private String color;
