@@ -10,7 +10,6 @@ import org.example.Findit.util.Inputvalidator;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -23,8 +22,12 @@ public class Main {
     private static Authservice authService = new Authservice();
     private static Itemservice itemService = new Itemservice();
     private static Adminservice adminService = new Adminservice();
+    private static Matchingservice matchingService = new Matchingservice();
+    private static Claimservice claimService = new Claimservice();
+    private static Notificationservice notificationService = new Notificationservice();
 
     public static void main(String[] args) throws SQLException {
+
         new DB_Connection();
         Connection con = DB_Connection.getConnection();
 
@@ -139,22 +142,22 @@ public class Main {
                     reportLostItem(user);
                     break;
                 case 2:
-                    System.out.println("Report Found Item -- built in the next step.");
+                    reportFoundItem(user);
                     break;
                 case 3:
-                    System.out.println("Search Items -- built in a later step.");
+                    searchItems();
                     break;
                 case 4:
-                    System.out.println("View Possible Matches -- built in a later step.");
+                    viewPossibleMatches(user);
                     break;
                 case 5:
-                    System.out.println("My Reports -- built in a later step.");
+                    myReports(user);
                     break;
                 case 6:
-                    System.out.println("Submit Claim -- built in a later step.");
+                    submitClaim(user);
                     break;
                 case 7:
-                    System.out.println("Notifications -- built in a later step.");
+                    viewNotifications(user);
                     break;
                 case 8:
                     loggedIn = false;
@@ -185,6 +188,7 @@ public class Main {
             System.out.println("Database error: " + e.getMessage());
         }
     }
+
     private static void reportFoundItem(User user) {
         System.out.println("\n--- Report Found Item ---");
         String category = Inputvalidator.readNonEmptyString(scanner, "Category (e.g. Electronics): ");
@@ -204,6 +208,7 @@ public class Main {
             System.out.println("Database error: " + e.getMessage());
         }
     }
+
     private static void searchItems() {
         System.out.println("\n--- Search Items ---");
         System.out.println("1. Search Lost Items");
@@ -218,9 +223,9 @@ public class Main {
                 List<Lostitem> results;
                 if (filterChoice.equalsIgnoreCase("y")) {
                     String category = Inputvalidator.readNonEmptyString(scanner, "Category: ");
-                    results = itemService.searchLostItems(keyword, category); // overload with category
+                    results = itemService.searchLostItems(keyword, category);
                 } else {
-                    results = itemService.searchLostItems(keyword); // overload with keyword only
+                    results = itemService.searchLostItems(keyword);
                 }
 
                 if (results.isEmpty()) {
@@ -274,7 +279,7 @@ public class Main {
             }
 
             List<Founditem> allFoundItems = itemService.getAllFoundItems();
-            List<Matchresult> matches = Matchingservice.findMatches(lostItem, allFoundItems);
+            List<Matchresult> matches = matchingService.findMatches(lostItem, allFoundItems);
 
             if (matches.isEmpty()) {
                 System.out.println("No found items exist yet to compare against.");
@@ -343,9 +348,9 @@ public class Main {
                 return;
             }
 
-            double matchScore = Matchingservice.calculateMatchScore(lostItem, foundItem);
+            double matchScore = matchingService.calculateMatchScore(lostItem, foundItem);
 
-            Claimservice.submitClaim(lostItemId, foundItemId, user.getId(), matchScore);
+            claimService.submitClaim(lostItemId, foundItemId, user.getId(), matchScore);
             System.out.println("Claim submitted successfully! Match score: " + matchScore
                     + "%. Status: PENDING. An admin will review it.");
 
@@ -353,11 +358,12 @@ public class Main {
             System.out.println("Database error: " + e.getMessage());
         }
     }
+
     private static void viewNotifications(User user) {
         System.out.println("\n--- Notifications ---");
 
         try {
-            List<Notification> notifications = Notificationservice.getNotificationsByUser(user.getId());
+            List<Notification> notifications = notificationService.getNotificationsByUser(user.getId());
 
             if (notifications.isEmpty()) {
                 System.out.println("You have no notifications.");
@@ -375,7 +381,7 @@ public class Main {
             if (!markChoice.equalsIgnoreCase("n")) {
                 try {
                     int notifId = Integer.parseInt(markChoice);
-                    Notificationservice.markAsRead(notifId);
+                    notificationService.markAsRead(notifId);
                     System.out.println("Marked as read.");
                 } catch (NumberFormatException e) {
                     System.out.println("Invalid ID, skipping.");
@@ -387,7 +393,7 @@ public class Main {
         }
     }
 
-    //ADMIN DASHBOARD
+
 
     private static void adminDashboard(Admin admin) {
         boolean loggedIn = true;
@@ -479,36 +485,58 @@ public class Main {
                 System.out.println("No claims found.");
                 return;
             }
+
             for (Claim c : claims) {
-                System.out.println("[ID:" + c.getClaimId() + "] Lost#" + c.getLostItemId()
-                        + " <-> Found#" + c.getFoundItemId() + " | Claimant User#" + c.getClaimantId()
-                        + " | Score: " + c.getMatchScore() + "% | Status: " + c.getStatus());
+                Lostitem lostItem = itemService.getLostItemById(c.getLostItemId());
+                Founditem foundItem = itemService.getFoundItemById(c.getFoundItemId());
+
+                System.out.println("\n[Claim ID:" + c.getClaimId() + "] Status: " + c.getStatus()
+                        + " | Match Score: " + c.getMatchScore() + "% | Claimant: User#" + c.getClaimantId());
+
+                if (lostItem != null) {
+                    System.out.println("  LOST  [ID:" + lostItem.getId() + "] " + lostItem.getItemName()
+                            + " (" + lostItem.getCategory() + ", " + lostItem.getColor() + ") at "
+                            + lostItem.getLocation() + " on " + lostItem.getItemDate());
+                    System.out.println("        Description: " + lostItem.getDescription());
+                } else {
+                    System.out.println("  LOST  [ID:" + c.getLostItemId() + "] (item not found)");
+                }
+
+                if (foundItem != null) {
+                    System.out.println("  FOUND [ID:" + foundItem.getId() + "] " + foundItem.getItemName()
+                            + " (" + foundItem.getCategory() + ", " + foundItem.getColor() + ") at "
+                            + foundItem.getLocation() + " on " + foundItem.getItemDate());
+                    System.out.println("        Description: " + foundItem.getDescription());
+                } else {
+                    System.out.println("  FOUND [ID:" + c.getFoundItemId() + "] (item not found)");
+                }
             }
+
         } catch (SQLException e) {
             System.out.println("Database error: " + e.getMessage());
             return;
         }
 
         String action = Inputvalidator.readNonEmptyString(scanner,
-                "Enter Claim ID to review, or 'n' to go back: ");
+                "\nEnter Claim ID to review, or 'n' to go back: ");
         if (action.equalsIgnoreCase("n")) {
             return;
         }
 
         try {
             int claimId = Integer.parseInt(action);
-            Claim claim = Claimservice.getClaimById(claimId); // throws ClaimNotFoundException if missing
+            Claim claim = claimService.getClaimById(claimId);
 
             String decision = Inputvalidator.readNonEmptyString(scanner, "Approve or Reject? (a/r): ");
 
             if (decision.equalsIgnoreCase("a")) {
                 adminService.approveClaim(claimId);
-                Notificationservice.sendNotification(claim.getClaimantId(),
+                notificationService.sendNotification(claim.getClaimantId(),
                         "Your claim #" + claimId + " has been approved!");
                 System.out.println("Claim approved and user notified.");
             } else if (decision.equalsIgnoreCase("r")) {
                 adminService.rejectClaim(claimId);
-                Notificationservice.sendNotification(claim.getClaimantId(),
+                notificationService.sendNotification(claim.getClaimantId(),
                         "Your claim #" + claimId + " has been rejected.");
                 System.out.println("Claim rejected and user notified.");
             } else {
