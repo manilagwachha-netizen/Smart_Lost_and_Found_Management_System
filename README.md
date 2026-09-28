@@ -484,8 +484,6 @@ The results are sorted from the highest match score to the lowest match score.
 
 # Screenshots
 
-Add 2–3 screenshots of the terminal application here after running the program.
-
 ### Screenshot 1 - Main Menu
 
 ![img_2.png](img_2.png)
